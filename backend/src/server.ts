@@ -29,7 +29,7 @@ class Server {
   constructor() {
     this.app = express();
     this.port = parseInt(process.env.PORT || '3001');
-    this.supabase = getSupabaseClient();
+    // this.supabase = getSupabaseClient();
     
     this.initializeMiddleware();
     this.initializeRoutes();
@@ -132,8 +132,8 @@ class Server {
 
   public async start(): Promise<void> {
     try {
-      // Connexion à la base de données
-      await this.connectDatabase();
+      // Connexion à la base de données (désactivée pour la simulation)
+      // await this.connectDatabase();
 
       // Démarrage du serveur
       this.app.listen(this.port, () => {

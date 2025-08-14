@@ -4,7 +4,7 @@
   "description": "API Backend pour l'application de gestion des bons de livraison Aegean",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/server.ts",
+    "dev": "nodemon --ignore uploads/ --ignore reports/ --ignore logs/ --exec ts-node --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "jest",

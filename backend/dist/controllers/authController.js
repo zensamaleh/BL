@@ -4,30 +4,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = exports.logActivity = exports.generateTokens = void 0;
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const supabaseRest_1 = require("../config/supabaseRest");
-const supabase = (0, supabaseRest_1.getSupabaseClient)();
 const generateTokens = (user) => {
     const accessToken = jsonwebtoken_1.default.sign({
         userId: user.id,
         username: user.username,
-        role: user.role
-    }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '24h' });
+        role: user.role,
+        nom_complet: user.nom_complet
+    }, process.env.JWT_SECRET || 'your_jwt_secret_123456', { expiresIn: '24h' });
     const refreshToken = jsonwebtoken_1.default.sign({
         userId: user.id
-    }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '7d' });
+    }, process.env.JWT_SECRET || 'your_jwt_secret_123456', { expiresIn: '7d' });
     return { accessToken, refreshToken };
 };
 exports.generateTokens = generateTokens;
 const logActivity = async (userId, action, details) => {
     try {
-        await supabase.insert('activity_logs', {
-            user_id: userId,
-            action,
-            details,
-            timestamp: new Date().toISOString()
-        });
+        return;
     }
     catch (error) {
         console.error('Erreur log activité:', error);
@@ -37,54 +30,51 @@ exports.logActivity = logActivity;
 class AuthController {
     static async login(req, res) {
         try {
-            const { username, password } = req.body;
-            const userResult = await supabase.select('users', '*', {
-                username,
-                actif: true
-            });
-            if (userResult.error || !userResult.data || userResult.data.length === 0) {
-                res.status(401).json({
-                    success: false,
-                    message: 'Nom d\'utilisateur ou mot de passe incorrect'
-                });
-                return;
+            const { username } = req.body;
+            let mockUser;
+            const baseUser = {
+                id: 'user-' + Math.random().toString(36).substring(2, 9),
+                email: `${username}@aegean.gr`,
+                telephone: '0123456789',
+                actif: true,
+                created_at: new Date(),
+                updated_at: new Date(),
+                last_login: new Date(),
+                password_hash: 'mock_hash'
+            };
+            switch (username) {
+                case 'chef':
+                    mockUser = { ...baseUser, username: 'chef', role: 'chef', nom_complet: 'Chef de quai' };
+                    break;
+                case 'agent':
+                    mockUser = { ...baseUser, username: 'agent', role: 'agent', nom_complet: 'Agent de quai' };
+                    break;
+                case 'chauffeur':
+                    mockUser = { ...baseUser, username: 'chauffeur', role: 'chauffeur', nom_complet: 'Chauffeur' };
+                    break;
+                default:
+                    mockUser = { ...baseUser, username: 'chauffeur', role: 'chauffeur', nom_complet: 'Chauffeur par défaut' };
+                    break;
             }
-            const user = userResult.data[0];
-            if (!user.password_hash) {
-                res.status(401).json({
-                    success: false,
-                    message: 'Données utilisateur invalides'
-                });
-                return;
-            }
-            const isValidPassword = await bcryptjs_1.default.compare(password, user.password_hash);
-            if (!isValidPassword) {
-                res.status(401).json({
-                    success: false,
-                    message: 'Nom d\'utilisateur ou mot de passe incorrect'
-                });
-                return;
-            }
-            const { accessToken, refreshToken } = (0, exports.generateTokens)(user);
-            await supabase.update('users', { last_login: new Date().toISOString() }, { id: user.id });
-            await (0, exports.logActivity)(user.id, 'user_login', {
+            const { accessToken, refreshToken } = (0, exports.generateTokens)(mockUser);
+            await (0, exports.logActivity)(mockUser.id, 'user_login_simulation', {
                 ip: req.ip,
                 userAgent: req.get('User-Agent')
             });
             const response = {
                 success: true,
-                message: 'Connexion réussie',
+                message: 'Connexion simulée réussie',
                 data: {
                     user: {
-                        id: user.id,
-                        username: user.username,
-                        email: user.email,
-                        role: user.role,
-                        nom_complet: user.nom_complet,
-                        telephone: user.telephone,
-                        actif: user.actif,
-                        created_at: user.created_at,
-                        updated_at: user.updated_at
+                        id: mockUser.id,
+                        username: mockUser.username,
+                        email: mockUser.email,
+                        role: mockUser.role,
+                        nom_complet: mockUser.nom_complet,
+                        telephone: mockUser.telephone,
+                        actif: mockUser.actif,
+                        created_at: mockUser.created_at,
+                        updated_at: mockUser.updated_at
                     },
                     token: accessToken,
                     refreshToken
@@ -93,179 +83,54 @@ class AuthController {
             res.json(response);
         }
         catch (error) {
-            console.error('Erreur login:', error);
+            console.error('Erreur login (simulation):', error);
             res.status(500).json({
                 success: false,
-                message: 'Erreur serveur lors de la connexion'
+                message: 'Erreur serveur lors de la connexion simulée'
             });
         }
     }
     static async register(req, res) {
-        try {
-            const { username, email, password, role, nom_complet, telephone } = req.body;
-            const existingUser = await supabase.select('users', 'id', { username });
-            if (existingUser.data && existingUser.data.length > 0) {
-                res.status(409).json({
-                    success: false,
-                    message: 'Ce nom d\'utilisateur existe déjà'
-                });
-                return;
-            }
-            const existingEmail = await supabase.select('users', 'id', { email });
-            if (existingEmail.data && existingEmail.data.length > 0) {
-                res.status(409).json({
-                    success: false,
-                    message: 'Cette adresse email est déjà utilisée'
-                });
-                return;
-            }
-            const passwordHash = await bcryptjs_1.default.hash(password, 10);
-            const newUserResult = await supabase.insert('users', {
-                username,
-                email,
-                password_hash: passwordHash,
-                role,
-                nom_complet,
-                telephone,
-                actif: true,
-                created_at: new Date().toISOString()
-            });
-            if (newUserResult.error) {
-                res.status(400).json({
-                    success: false,
-                    message: 'Erreur lors de la création de l\'utilisateur',
-                    details: newUserResult.error.message
-                });
-                return;
-            }
-            const newUser = newUserResult.data?.[0];
-            await (0, exports.logActivity)(newUser.id, 'user_register', {
-                ip: req.ip,
-                userAgent: req.get('User-Agent')
-            });
-            res.status(201).json({
-                success: true,
-                message: 'Utilisateur créé avec succès',
-                data: {
-                    id: newUser.id,
-                    username: newUser.username,
-                    email: newUser.email,
-                    role: newUser.role,
-                    nom_complet: newUser.nom_complet
-                }
-            });
-        }
-        catch (error) {
-            console.error('Erreur register:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Erreur serveur lors de l\'inscription'
-            });
-        }
+        res.status(201).json({
+            success: true,
+            message: 'Inscription simulée réussie. Veuillez vous connecter.'
+        });
     }
     static async getProfile(req, res) {
-        try {
-            if (!req.user) {
-                res.status(401).json({
-                    success: false,
-                    message: 'Utilisateur non authentifié'
-                });
-                return;
-            }
-            const userResult = await supabase.select('users', '*', { id: req.user.id });
-            if (userResult.error || !userResult.data || userResult.data.length === 0) {
-                res.status(404).json({
-                    success: false,
-                    message: 'Utilisateur non trouvé'
-                });
-                return;
-            }
-            const user = userResult.data[0];
-            res.json({
-                success: true,
-                message: 'Profil récupéré avec succès',
-                data: {
-                    id: user.id,
-                    username: user.username,
-                    email: user.email,
-                    role: user.role,
-                    nom_complet: user.nom_complet,
-                    telephone: user.telephone,
-                    actif: user.actif,
-                    last_login: user.last_login,
-                    created_at: user.created_at
-                }
-            });
+        if (!req.user) {
+            res.status(401).json({ success: false, message: 'Non authentifié' });
+            return;
         }
-        catch (error) {
-            console.error('Erreur getProfile:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Erreur serveur lors de la récupération du profil'
-            });
-        }
+        const { userId, username, role, nom_complet } = req.user;
+        res.json({
+            success: true,
+            message: 'Profil simulé récupéré avec succès',
+            data: {
+                id: userId,
+                username: username,
+                role: role,
+                nom_complet: nom_complet,
+                email: `${username}@aegean.gr`,
+                telephone: '0123456789',
+                actif: true,
+                last_login: new Date().toISOString(),
+                created_at: new Date().toISOString()
+            }
+        });
     }
     static async logout(req, res) {
-        try {
-            if (req.user) {
-                await (0, exports.logActivity)(req.user.id, 'user_logout', {
-                    ip: req.ip,
-                    userAgent: req.get('User-Agent')
-                });
-            }
-            res.json({
-                success: true,
-                message: 'Déconnexion réussie'
-            });
+        if (req.user) {
+            await (0, exports.logActivity)(req.user.id, 'user_logout_simulation', { ip: req.ip });
         }
-        catch (error) {
-            console.error('Erreur logout:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Erreur serveur lors de la déconnexion'
-            });
-        }
+        res.json({ success: true, message: 'Déconnexion simulée réussie' });
     }
     static async updateProfile(req, res) {
-        try {
-            if (!req.user) {
-                res.status(401).json({
-                    success: false,
-                    message: 'Utilisateur non authentifié'
-                });
-                return;
-            }
-            const { nom_complet, telephone, email } = req.body;
-            const updateResult = await supabase.update('users', {
-                nom_complet,
-                telephone,
-                email,
-                updated_at: new Date().toISOString()
-            }, { id: req.user.id });
-            if (updateResult.error) {
-                res.status(400).json({
-                    success: false,
-                    message: 'Erreur lors de la mise à jour',
-                    details: updateResult.error.message
-                });
-                return;
-            }
-            await (0, exports.logActivity)(req.user.id, 'profile_update', {
-                ip: req.ip,
-                userAgent: req.get('User-Agent')
-            });
-            res.json({
-                success: true,
-                message: 'Profil mis à jour avec succès'
-            });
+        if (!req.user) {
+            res.status(401).json({ success: false, message: 'Non authentifié' });
+            return;
         }
-        catch (error) {
-            console.error('Erreur updateProfile:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Erreur serveur lors de la mise à jour'
-            });
-        }
+        await (0, exports.logActivity)(req.user.id, 'profile_update_simulation', { ip: req.ip });
+        res.json({ success: true, message: 'Profil mis à jour (simulation)' });
     }
     static async verifyToken(req, res) {
         try {
