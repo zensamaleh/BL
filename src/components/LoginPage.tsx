@@ -20,14 +20,16 @@ const colors = {
   900: "#1a1d18",
 };
 
-interface LoginPageProps {
-  onLogin: (user: User) => void;
-}
+import { useAuth } from "../hooks/useAuth";
 
-export function LoginPage({ onLogin }: LoginPageProps) {
+interface LoginPageProps {}
+
+export function LoginPage({}: LoginPageProps) {
   const gradientRef = useRef<HTMLDivElement>(null);
+  const { login } = useAuth();
   const [role, setRole] = React.useState<UserRole>("chauffeur");
   const [name, setName] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
 
   useEffect(() => {
     // Animate words
@@ -104,15 +106,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     };
   }, []);
 
-  const handleLogin = () => {
-    if (name.trim()) {
-      onLogin({
-        id: `${role}_${Date.now()}`,
-        name,
-        role,
-        email: `${name.toLowerCase()}@aegean.com`,
-      });
+  const handleLogin = async () => {
+    if (!name.trim()) {
+        setError("Le nom ne peut pas être vide.");
+        return;
     }
+    setError(null);
+    // The mock backend uses the 'name' as the username for login
+    // The password can be anything, as it's not checked by the mock
+    await login(name, "password");
   };
 
   return (
@@ -249,11 +251,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 </Select>
               </div>
               <Button 
-                onClick={handleLogin} 
-                className="w-full bg-[var(--color-700)] hover:bg-[var(--color-600)] text-[var(--color-100)]"
+                onClick={handleLogin}
+                disabled={!name.trim()}
+                className="w-full bg-[var(--color-700)] hover:bg-[var(--color-600)] text-[var(--color-100)] disabled:opacity-50"
               >
                 Se connecter
               </Button>
+              {error && <p className="text-sm text-red-400 text-center pt-2">{error}</p>}
             </CardContent>
           </Card>
         </div>
