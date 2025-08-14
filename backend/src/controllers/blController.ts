@@ -3,382 +3,162 @@ import { AuthenticatedRequest, logActivity } from '../middleware/auth';
 import { getSupabaseClient } from '../config/supabaseRest';
 import { BonLivraison, ApiResponse, PaginatedResponse, DashboardStats } from '../types';
 
-// Instance Supabase singleton
-const supabase = getSupabaseClient();
+// Instance Supabase singleton (désactivée pour la simulation)
+// const supabase = getSupabaseClient();
+
+// Données de simulation
+export const mockBLs: BonLivraison[] = Array.from({ length: 25 }, (_, i) => {
+  const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+  const statuts: BonLivraison['statut'][] = ['capture', 'en_attente', 'valide', 'integre'];
+  return {
+    id: `bl_${i + 1}`,
+    numero_bl: `BL-2025-00${i + 1}`,
+    montant_total: parseFloat((Math.random() * 5000 + 500).toFixed(2)),
+    nombre_palettes: Math.floor(Math.random() * 10) + 1,
+    date_preparation: date,
+    date_saisie: date,
+    chauffeur_id: `chauffeur_${(i % 3) + 1}`,
+    // @ts-ignore
+    chauffeur_nom: `Chauffeur ${(i % 3) + 1}`,
+    agent_id: `agent_${(i % 2) + 1}`,
+    // @ts-ignore
+    agent_nom: `Agent ${(i % 2) + 1}`,
+    statut: statuts[i % statuts.length]!,
+    notes: `Note pour le BL ${i + 1}`,
+    notes_ecart: (i % 5 === 0) ? 'Écart de 2 colis' : undefined,
+    created_at: date,
+    updated_at: date,
+  };
+});
+
 
 export class BLController {
-  // Créer un nouveau BL (chauffeur)
+  // Créer un nouveau BL (simulé)
   static async createBL(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          message: 'Utilisateur non authentifié'
-        } as ApiResponse);
-        return;
-      }
-
-      const { numero_bl, montant_total, nombre_palettes, date_preparation, notes } = req.body;
-
-      // Vérifier si le BL existe déjà
-      const existingBL = await supabase.select('bons_livraison', 'id', { numero_bl });
-      if (existingBL.data && existingBL.data.length > 0) {
-        res.status(409).json({
-          success: false,
-          message: 'Ce numéro de BL existe déjà'
-        } as ApiResponse);
-        return;
-      }
-
-      // Créer le nouveau BL
-      const newBLResult = await supabase.insert('bons_livraison', {
-        numero_bl,
-        montant_total,
-        nombre_palettes,
-        date_preparation,
-        notes,
-        chauffeur_id: req.user.id,
-        statut: 'capture',
-        created_at: new Date().toISOString()
-      });
-
-      if (newBLResult.error) {
-        res.status(400).json({
-          success: false,
-          message: 'Erreur lors de la création du BL',
-          details: newBLResult.error.message
-        } as ApiResponse);
-        return;
-      }
-
-      const newBL = newBLResult.data?.[0];
-
-      // Log de l'activité
-      await logActivity(
-        req.user.id,
-        'bl_created',
-        { numero_bl, montant_total },
-        newBL?.id,
-        req.ip,
-        req.get('User-Agent')
-      );
-
-      res.status(201).json({
-        success: true,
-        message: 'BL créé avec succès',
-        data: newBL
-      } as ApiResponse);
-    } catch (error) {
-      console.error('Erreur createBL:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Erreur interne du serveur'
-      } as ApiResponse);
-    }
+    console.log('[SIMULATION] createBL called with:', req.body);
+    const { numero_bl, montant_total } = req.body;
+    const newBL: BonLivraison = {
+      id: `bl_${Math.random().toString(36).substring(2, 9)}`,
+      numero_bl,
+      montant_total,
+      nombre_palettes: 5,
+      date_preparation: new Date(),
+      chauffeur_id: req.user!.id,
+      statut: 'capture',
+      created_at: new Date(),
+      updated_at: new Date()
+    };
+    res.status(201).json({
+      success: true,
+      message: 'BL créé avec succès (simulation)',
+      data: newBL
+    } as ApiResponse);
   }
 
-  // Récupérer tous les BL avec pagination
+  // Récupérer tous les BL avec pagination (simulé)
   static async getAllBL(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          message: 'Utilisateur non authentifié'
-        } as ApiResponse);
-        return;
-      }
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const statut = req.query.statut as string;
+    const { role, id: userId } = req.user!;
 
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const statut = req.query.statut as string;
+    let filteredBLs = mockBLs;
 
-      // Construire les filtres
-      let filters: Record<string, any> = {};
-      
-      // Si l'utilisateur est chauffeur, ne voir que ses BL
-      if (req.user.role === 'chauffeur') {
-        filters.chauffeur_id = req.user.id;
-      }
-
-      // Filtrer par statut si spécifié
-      if (statut) {
-        filters.statut = statut;
-      }
-
-      // Récupérer les BL
-      const blResult = await supabase.select('bons_livraison', '*', filters);
-
-      if (blResult.error) {
-        res.status(500).json({
-          success: false,
-          message: 'Erreur lors de la récupération des BL',
-          details: blResult.error.message
-        } as ApiResponse);
-        return;
-      }
-
-      const allBL = blResult.data || [];
-
-      // Pagination manuelle (Supabase REST API ne supporte pas nativement la pagination)
-      const total = allBL.length;
-      const totalPages = Math.ceil(total / limit);
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedBL = allBL.slice(startIndex, endIndex);
-
-      const response: PaginatedResponse<BonLivraison> = {
-        data: paginatedBL as BonLivraison[],
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
-        }
-      };
-
-      res.json({
-        success: true,
-        message: 'BL récupérés avec succès',
-        data: response
-      } as ApiResponse);
-    } catch (error) {
-      console.error('Erreur getAllBL:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Erreur interne du serveur'
-      } as ApiResponse);
+    if (role === 'chauffeur') {
+      // @ts-ignore
+      filteredBLs = mockBLs.filter(bl => bl.chauffeur_id === userId);
     }
+
+    if (statut) {
+      filteredBLs = filteredBLs.filter(bl => bl.statut === statut);
+    }
+
+    const total = filteredBLs.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedBL = filteredBLs.slice(startIndex, endIndex);
+
+    const response: PaginatedResponse<BonLivraison> = {
+      data: paginatedBL,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    };
+
+    res.json({
+      success: true,
+      message: 'BL récupérés avec succès (simulation)',
+      data: response
+    } as ApiResponse);
   }
 
-  // Récupérer un BL par ID
+  // Récupérer un BL par ID (simulé)
   static async getBLById(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          message: 'Utilisateur non authentifié'
-        } as ApiResponse);
-        return;
-      }
+    const { id } = req.params;
+    const bl = mockBLs.find(b => b.id === id);
 
-      const { id } = req.params;
-
-      const blResult = await supabase.select('bons_livraison', '*', { id });
-
-      if (blResult.error || !blResult.data || blResult.data.length === 0) {
-        res.status(404).json({
-          success: false,
-          message: 'BL non trouvé'
-        } as ApiResponse);
-        return;
-      }
-
-      const bl = blResult.data[0];
-
-      // Vérifier les autorisations
-      if (req.user.role === 'chauffeur' && bl.chauffeur_id !== req.user.id) {
-        res.status(403).json({
-          success: false,
-          message: 'Accès non autorisé à ce BL'
-        } as ApiResponse);
-        return;
-      }
-
+    if (bl) {
       res.json({
         success: true,
-        message: 'BL récupéré avec succès',
+        message: 'BL récupéré avec succès (simulation)',
         data: bl
       } as ApiResponse);
-    } catch (error) {
-      console.error('Erreur getBLById:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Erreur interne du serveur'
-      } as ApiResponse);
+    } else {
+      res.status(404).json({ success: false, message: 'BL non trouvé (simulation)' });
     }
   }
 
-  // Mettre à jour un BL (agent/chef)
+  // Mettre à jour un BL (simulé)
   static async updateBL(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          message: 'Utilisateur non authentifié'
-        } as ApiResponse);
-        return;
-      }
-
-      const { id } = req.params;
-      const { statut, notes_ecart, agent_id } = req.body;
-
-      // Récupérer le BL existant
-      const existingBLResult = await supabase.select('bons_livraison', '*', { id });
-
-      if (existingBLResult.error || !existingBLResult.data || existingBLResult.data.length === 0) {
-        res.status(404).json({
-          success: false,
-          message: 'BL non trouvé'
-        } as ApiResponse);
-        return;
-      }
-
-      // Préparer les données de mise à jour
-      const updateData: Record<string, any> = {
-        updated_at: new Date().toISOString()
-      };
-
-      if (statut) updateData.statut = statut;
-      if (notes_ecart) updateData.notes_ecart = notes_ecart;
-      if (agent_id) updateData.agent_id = agent_id;
-
-      // Si validation par un agent, ajouter la date de saisie
-      if (statut === 'valide' || statut === 'integre') {
-        updateData.date_saisie = new Date().toISOString();
-        updateData.agent_id = req.user.id;
-      }
-
-      // Mettre à jour le BL
-      const updateResult = await supabase.update('bons_livraison', updateData, { id });
-
-      if (updateResult.error) {
-        res.status(400).json({
-          success: false,
-          message: 'Erreur lors de la mise à jour du BL',
-          details: updateResult.error.message
-        } as ApiResponse);
-        return;
-      }
-
-      // Log de l'activité
-      await logActivity(
-        req.user.id,
-        'bl_updated',
-        { statut, notes_ecart },
-        id,
-        req.ip,
-        req.get('User-Agent')
-      );
-
-      res.json({
-        success: true,
-        message: 'BL mis à jour avec succès',
-        data: updateResult.data?.[0]
-      } as ApiResponse);
-    } catch (error) {
-      console.error('Erreur updateBL:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Erreur interne du serveur'
-      } as ApiResponse);
-    }
+    const { id } = req.params;
+    console.log(`[SIMULATION] updateBL called for id ${id} with:`, req.body);
+    res.json({
+      success: true,
+      message: 'BL mis à jour avec succès (simulation)',
+      data: { id, ...req.body }
+    } as ApiResponse);
   }
 
-  // Supprimer un BL (chef seulement)
+  // Supprimer un BL (simulé)
   static async deleteBL(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          message: 'Utilisateur non authentifié'
-        } as ApiResponse);
-        return;
-      }
-
-      if (req.user.role !== 'chef') {
-        res.status(403).json({
-          success: false,
-          message: 'Seuls les chefs peuvent supprimer les BL'
-        } as ApiResponse);
-        return;
-      }
-
-      const { id } = req.params;
-
-      const deleteResult = await supabase.delete('bons_livraison', { id });
-
-      if (deleteResult.error) {
-        res.status(400).json({
-          success: false,
-          message: 'Erreur lors de la suppression du BL',
-          details: deleteResult.error.message
-        } as ApiResponse);
-        return;
-      }
-
-      // Log de l'activité
-      await logActivity(
-        req.user.id,
-        'bl_deleted',
-        {},
-        id,
-        req.ip,
-        req.get('User-Agent')
-      );
-
-      res.json({
-        success: true,
-        message: 'BL supprimé avec succès'
-      } as ApiResponse);
-    } catch (error) {
-      console.error('Erreur deleteBL:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Erreur interne du serveur'
-      } as ApiResponse);
-    }
+    const { id } = req.params;
+    console.log(`[SIMULATION] deleteBL called for id ${id}`);
+    res.json({ success: true, message: 'BL supprimé avec succès (simulation)' });
   }
 
-  // Dashboard stats (version simplifiée)
+  // Dashboard stats (simulé)
   static async getDashboardStats(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          message: 'Utilisateur non authentifié'
-        } as ApiResponse);
-        return;
-      }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-      // Récupérer tous les BL pour calculer les stats
-      const blResult = await supabase.select('bons_livraison', '*');
+    const stats: DashboardStats = {
+      bl_aujourd_hui: mockBLs.filter(bl => {
+        const blDate = new Date(bl.created_at);
+        blDate.setHours(0,0,0,0);
+        return blDate.getTime() === today.getTime();
+      }).length,
+      bl_en_attente: mockBLs.filter(bl => bl.statut === 'en_attente').length,
+      bl_valides: mockBLs.filter(bl => bl.statut === 'valide').length,
+      ecarts_detectes: mockBLs.filter(bl => !!bl.notes_ecart).length,
+      palettes_stockees: 23,
+      montant_total_mois: mockBLs
+        .filter(bl => {
+            const blDate = new Date(bl.created_at);
+            return blDate.getFullYear() === today.getFullYear() && blDate.getMonth() === today.getMonth();
+        })
+        .reduce((sum, bl) => sum + (bl.montant_total || 0), 0)
+    };
 
-      if (blResult.error) {
-        res.status(500).json({
-          success: false,
-          message: 'Erreur lors de la récupération des stats'
-        } as ApiResponse);
-        return;
-      }
-
-      const allBL = blResult.data || [];
-      const today = new Date().toISOString().split('T')[0];
-
-      // Calculer les stats
-      const stats: DashboardStats = {
-        bl_aujourd_hui: allBL.filter(bl => bl.created_at?.startsWith(today)).length,
-        bl_en_attente: allBL.filter(bl => bl.statut === 'en_attente').length,
-        bl_valides: allBL.filter(bl => bl.statut === 'valide').length,
-        ecarts_detectes: 0, // À implémenter avec la table ecarts
-        palettes_stockees: 0, // À implémenter avec la table palettes_stockees
-        montant_total_mois: allBL
-          .filter(bl => bl.created_at?.startsWith(new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0')))
-          .reduce((sum, bl) => sum + (bl.montant_total || 0), 0)
-      };
-
-      res.json({
-        success: true,
-        message: 'Stats récupérées avec succès',
-        data: stats
-      } as ApiResponse);
-    } catch (error) {
-      console.error('Erreur getDashboardStats:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Erreur interne du serveur'
-      } as ApiResponse);
-    }
+    res.json({
+      success: true,
+      message: 'Stats récupérées avec succès (simulation)',
+      data: stats
+    } as ApiResponse);
   }
 }

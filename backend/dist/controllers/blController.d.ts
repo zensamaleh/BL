@@ -1,5 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { BonLivraison } from '../types';
+export declare const mockBLs: BonLivraison[];
 export declare class BLController {
     static createBL(req: AuthenticatedRequest, res: Response): Promise<void>;
     static getAllBL(req: AuthenticatedRequest, res: Response): Promise<void>;

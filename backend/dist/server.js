@@ -11,7 +11,6 @@ const compression_1 = __importDefault(require("compression"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
-const supabaseRest_1 = require("./config/supabaseRest");
 const routes_1 = __importDefault(require("./routes"));
 const middleware_1 = require("./middleware");
 dotenv_1.default.config();
@@ -19,7 +18,6 @@ class Server {
     constructor() {
         this.app = (0, express_1.default)();
         this.port = parseInt(process.env.PORT || '3001');
-        this.supabase = (0, supabaseRest_1.getSupabaseClient)();
         this.initializeMiddleware();
         this.initializeRoutes();
         this.initializeErrorHandling();
@@ -96,7 +94,6 @@ class Server {
     }
     async start() {
         try {
-            await this.connectDatabase();
             this.app.listen(this.port, () => {
                 console.log('🚀 ========================================');
                 console.log(`🚀 API BL Management démarrée sur le port ${this.port}`);
