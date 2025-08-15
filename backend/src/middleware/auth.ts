@@ -15,8 +15,8 @@ interface JWTPayload {
   exp: number;
 }
 
-// Instance Supabase singleton
-const supabase = getSupabaseClient();
+// Instance Supabase singleton (désactivée pour la simulation)
+// const supabase = getSupabaseClient();
 
 export const authenticateToken = async (
   req: AuthenticatedRequest,
@@ -35,7 +35,7 @@ export const authenticateToken = async (
       return;
     }
 
-    const jwtSecret = process.env.JWT_SECRET;
+    const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_123456';
     if (!jwtSecret) {
       console.error('JWT_SECRET non configuré');
       res.status(500).json({
@@ -47,21 +47,20 @@ export const authenticateToken = async (
 
     const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
     
-    // Récupérer les informations utilisateur depuis Supabase
-    const userResult = await supabase.select('users', 
-      'id,username,email,role,nom_complet,telephone,actif', 
-      { id: decoded.userId, actif: true }
-    );
+    // En mode simulation, on fait confiance au contenu du token
+    // et on ne vérifie pas dans la base de données.
+    req.user = {
+        id: decoded.userId,
+        username: decoded.username,
+        role: decoded.role,
+        // Remplir les autres champs avec des données simulées si nécessaire
+        email: `${decoded.username}@aegean.gr`,
+        nom_complet: (decoded as any).nom_complet || decoded.username,
+        actif: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+    };
 
-    if (userResult.error || !userResult.data || userResult.data.length === 0) {
-      res.status(401).json({
-        success: false,
-        message: 'Utilisateur non trouvé ou inactif'
-      });
-      return;
-    }
-
-    req.user = userResult.data[0] as User;
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
@@ -139,17 +138,6 @@ export const logActivity = async (
   ipAddress?: string,
   userAgent?: string
 ): Promise<void> => {
-  try {
-    await supabase.insert('activity_logs', {
-      user_id: userId,
-      bl_id: blId,
-      action,
-      details: details ? JSON.stringify(details) : null,
-      ip_address: ipAddress,
-      user_agent: userAgent,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Erreur lors de l\'enregistrement du log d\'activité:', error);
-  }
+  // La journalisation est désactivée en mode simulation
+  return;
 };

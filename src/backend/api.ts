@@ -127,9 +127,10 @@ class APIService {
 
   // Authentification
   async login(email: string, password: string): Promise<AuthResponse> {
+    // Note: The form uses "name" but the API expects "username". We map it here.
     const response = await this.request<AuthResponse>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username: email, password }),
     });
     
     if (response.success && response.accessToken && response.refreshToken) {
