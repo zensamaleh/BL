@@ -80,9 +80,14 @@ export const authenticateToken = async (
     }
 
     console.error('Erreur lors de l\'authentification:', error);
+    // Send a more detailed error message in development
+    const message = process.env.NODE_ENV === 'production'
+      ? 'Erreur interne du serveur'
+      : `Erreur lors de l'authentification: ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
+      
     res.status(500).json({
       success: false,
-      message: 'Erreur interne du serveur'
+      message
     });
   }
 };

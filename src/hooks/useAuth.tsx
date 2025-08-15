@@ -59,11 +59,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       
       return response;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors de la connexion:', error);
       return {
         success: false,
-        message: 'Erreur de connexion au serveur'
+        message: error.message || 'Erreur de connexion au serveur'
       };
     } finally {
       setIsLoading(false);
@@ -86,11 +86,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       
       return response;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors de l\'inscription:', error);
       return {
         success: false,
-        message: 'Erreur de connexion au serveur'
+        message: error.message || 'Erreur de connexion au serveur'
       };
     } finally {
       setIsLoading(false);

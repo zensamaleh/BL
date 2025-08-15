@@ -108,20 +108,32 @@ class APIService {
           };
           const retryResponse = await fetch(url, config);
           if (!retryResponse.ok) {
-            throw new Error(`API Error: ${retryResponse.status}`);
+            const errorData = await retryResponse.json().catch(() => ({}));
+            throw new Error(errorData.message || `API Error: ${retryResponse.status}`);
           }
           return await retryResponse.json();
         }
       }
       
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `API Error: ${response.status}`);
       }
       
       return await response.json();
     } catch (error) {
-      console.error(`API request failed for ${endpoint}:`, error);
-      throw error;
+      // Handle the case where error is an object with a message property
+      let errorMessage = 'Unknown error occurred';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null && 'message' in error) {
+        errorMessage = (error as { message: string }).message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      console.error(`API request failed for ${endpoint}:`, errorMessage);
+      throw new Error(errorMessage);
     }
   }
 
@@ -175,8 +187,8 @@ class APIService {
 
   async getProfile(): Promise<User | null> {
     try {
-      const response = await this.request<{ user: User }>('/auth/profile');
-      return response.user;
+      const response = await this.request<{ data: User }>('/auth/profile');
+      return response.data;
     } catch {
       return null;
     }

@@ -114,9 +114,14 @@ export class AuthController {
       res.json(response);
     } catch (error) {
       console.error('Erreur login (simulation):', error);
+      // Send a more detailed error message in development
+      const message = process.env.NODE_ENV === 'production'
+        ? 'Erreur serveur lors de la connexion simulée'
+        : `Erreur login (simulation): ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
+        
       res.status(500).json({
         success: false,
-        message: 'Erreur serveur lors de la connexion simulée'
+        message
       } as ApiResponse);
     }
   }
@@ -193,9 +198,14 @@ export class AuthController {
       } as ApiResponse);
     } catch (error) {
       console.error('Erreur verifyToken:', error);
+      // Send a more detailed error message in development
+      const message = process.env.NODE_ENV === 'production'
+        ? 'Erreur serveur lors de la vérification'
+        : `Erreur verifyToken: ${error instanceof Error ? error.message : 'Erreur inconnue'}`;
+        
       res.status(500).json({
         success: false,
-        message: 'Erreur serveur lors de la vérification'
+        message
       } as ApiResponse);
     }
   }
